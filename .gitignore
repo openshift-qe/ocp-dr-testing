@@ -1,0 +1,7 @@
+.idea/*
+jenkins/library/.idea/*
+*.iml
+venv/*
+*token
+*.swp
+*.pyc
