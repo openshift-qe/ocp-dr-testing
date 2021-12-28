@@ -1,26 +1,14 @@
-FROM quay.io/centos/centos:8
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.17-openshift-4.10 AS builder
+WORKDIR /go/src/github.com/openshift/cluster-etcd-operator
+COPY . .
+ENV GO_PACKAGE github.com/openshift/cluster-etcd-operator
+RUN make build --warn-undefined-variables
 
-LABEL vendor="Red Hat inc."
-LABEL maintainer="OCP QE Team"
+FROM registry.ci.openshift.org/ocp/4.10:base
+COPY --from=builder /go/src/github.com/openshift/cluster-etcd-operator/bindata/bootkube/bootstrap-manifests /usr/share/bootkube/manifests/bootstrap-manifests/
+COPY --from=builder /go/src/github.com/openshift/cluster-etcd-operator/bindata/bootkube/manifests /usr/share/bootkube/manifests/manifests/
+COPY --from=builder /go/src/github.com/openshift/cluster-etcd-operator/cluster-etcd-operator /usr/bin/
+COPY manifests/ /manifests
+COPY vendor/github.com/openshift/api/operator/v1/0000_12_etcd-operator_01_config.crd.yaml /manifests
 
-USER root
-
-RUN set -x && \
-    yum -y update && \
-    INSTALL_PKGS="bsdtar git openssh-clients httpd-tools rsync" && \
-    yum install -y $INSTALL_PKGS && \
-    GECKODRIVER_DOWNLOAD_URL="$(curl -sSL https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep -Eo 'http.*linux64.tar.gz' | sed -E 's/.*(https[^"]*).*/\1/' | head -1)" && \
-    curl -sSL $GITHUB_API_CURL_OPTS "$GECKODRIVER_DOWNLOAD_URL" | bsdtar -xvf - -C /usr/local/bin && \
-    chmod +x /usr/local/bin/geckodriver && \
-    curl -sSL https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -o /tmp/epel-release-latest-8.noarch.rpm && \
-    yum install -y /tmp/epel-release-latest-8.noarch.rpm
-ADD . /verification-tests/
-RUN chmod 777 /verification-tests/
-RUN mv /tierN/ /verification-tests/features/tierN/
-RUN set -x && \
-    yum module reset ruby && \
-    yum module -y enable ruby:2.7 && \
-    yum module -y install ruby:2.7
-RUN /verification-tests/tools/install_os_deps.sh
-RUN /verification-tests/tools/hack_bundle.rb
-RUN yum clean all -y && rm -rf /var/cache/yum /tmp/* /verification-tests/Gemfile.lock
+LABEL io.openshift.release.operator true
